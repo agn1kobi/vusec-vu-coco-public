@@ -228,7 +228,6 @@ class IRGen(ASTTransformer):
             eq = ast.Operator.get('==')
             false = self.makebool(False)
             return self.visit(ast.BinaryOp(node.value, eq, false).at(node))
-
         if node.op == '-':
             return self.builder.neg(self.visit(node.value))
 
@@ -298,6 +297,9 @@ class IRGen(ASTTransformer):
     def visitIntConst(self, node):
         return ir.Constant(self.getty(node.ty), node.value)
 
+    def visitFloatConst(self, node):
+        return ir.Constant(self.getty(node.ty), node.value)
+
     def visitStringConst(self, node):
         # name is unique, based on simple counter
         name = '.str.%d' % self.nstrings
@@ -334,6 +336,9 @@ class IRGen(ASTTransformer):
 
         if str(ty) == 'int':
             return ir.IntType(ast.Type.int_bits)
+        
+        if str(ty) == 'float':
+            return ir.DoubleType()
 
         assert str(ty) == 'void'
         return ir.VoidType()

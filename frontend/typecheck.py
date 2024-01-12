@@ -22,6 +22,7 @@ class TypeChecker(ASTVisitor):
         self.tchar = Type.get('char')
         self.tint = Type.get('int')
         self.tvoid = Type.get('void')
+        self.tfloat = Type.get('float')
         self.curfn = None
         self.in_loop = False
 
@@ -30,10 +31,10 @@ class TypeChecker(ASTVisitor):
             return [self.tbool]
 
         if operator.is_arithmetic() or operator.is_relational():
-            return [self.tchar, self.tint]
+            return [self.tchar, self.tint, self.tfloat]
 
         assert operator.is_equality()
-        return [self.tbool, self.tchar, self.tint]
+        return [self.tbool, self.tchar, self.tint, self.tfloat]
 
     def check_type(self, node, *expected):
         if node.ty not in expected:
@@ -231,6 +232,9 @@ class TypeChecker(ASTVisitor):
 
     def visitIntConst(self, node):
         node.ty = self.tint
+    
+    def visitFloatConst(self, node):
+        node.ty = self.tfloat
 
     def visitStringConst(self, node):
         node.ty = ArrayType.get(self.tchar)
