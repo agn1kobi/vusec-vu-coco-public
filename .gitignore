@@ -1,0 +1,17 @@
+*.swp
+lib/
+build.log
+bin/
+obj/
+bootstrap.log
+*.pyc
+coco.tar.gz
+framework.tar.gz
+.clangd
+compile_commands.json
+*.zst
+*.builderr
+*.filecheckerr
+*.outerr
+*.outout
+*.user

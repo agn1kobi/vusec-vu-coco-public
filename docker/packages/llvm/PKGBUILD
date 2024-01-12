@@ -1,0 +1,80 @@
+# Maintainer: Evangelos Foutras <evangelos@foutrelis.com>
+# Contributor: Jan "heftig" Steffens <jan.steffens@gmail.com>
+
+pkgname=('llvm')
+pkgver=10.0.1
+pkgrel=2
+arch=('x86_64')
+url="https://llvm.org/"
+license=('custom:Apache 2.0 with LLVM Exception')
+makedepends=('cmake' 'ninja' 'libffi' 'libedit' 'ncurses' 'libxml2'
+             'python-sphinx' 'python-recommonmark')
+options=('!staticlibs')
+source=(https://github.com/llvm/llvm-project/releases/download/llvmorg-${pkgver}/llvm-project-${pkgver}.tar.xz{,.sig})
+sha256sums=('SKIP'
+            'SKIP')
+validpgpkeys+=('B6C8F98282B944E3B0D5C2530FC3042E345AD05D') # Hans Wennborg <hans@chromium.org>
+validpgpkeys+=('474E22316ABF4785A88C6E8EA2C794A986419D8A') # Tom Stellard <tstellar@redhat.com>
+
+prepare() {
+  cd "$srcdir/"
+  mv llvm-project-$pkgver llvm-project
+  mkdir -p build
+  cp ../benchmark_register.h "$srcdir/llvm-project/llvm/utils/benchmark/src/benchmark_register.h"
+}
+
+build() {
+  cd "$srcdir/build"
+
+  export CC=clang
+  export CXX=clang++
+
+
+#    -DLLVM_USE_SANITIZER="Undefined" \
+#    -DLLVM_OPTIMIZE_SANITIZED_BUILDS=Off \
+
+  cmake ../llvm-project/llvm -G Ninja \
+    -DLLVM_TARGETS_TO_BUILD="X86;NVPTX" \
+    -DCMAKE_CXX_FLAGS="-Wno-deprecated-declarations -Wno-bitwise-instead-of-logical -Wno-deprecated-copy" \
+    -DCLANG_ENABLE_STATIC_ANALYZER=OFF \
+    -DCLANG_ENABLE_ARCMT=OFF \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DLLVM_HOST_TRIPLE=$CHOST \
+    -DLLVM_BUILD_LLVM_DYLIB=ON \
+    -DLLVM_LINK_LLVM_DYLIB=ON \
+    -DLLVM_BUILD_UTILS=ON \
+    -DLLVM_INSTALL_UTILS=ON \
+    -DLLVM_ENABLE_RTTI=ON \
+    -DLLVM_ENABLE_FFI=OFF \
+    -DLLVM_BUILD_TESTS=OFF \
+    -DLLVM_BUILD_DOCS=OFF \
+    -DLLVM_ENABLE_SPHINX=OFF \
+    -DLLVM_ENABLE_DOXYGEN=OFF \
+    -DLLVM_ENABLE_BINDINGS=OFF \
+    -DLLVM_BINUTILS_INCDIR=/usr/include \
+    -DLLVM_PARALLEL_LINK_JOBS=1 \
+    -DLLVM_ENABLE_PROJECTS="clang" \
+    -DLLVM_USE_LINKER=lld \
+    -Wno-dev
+  ninja all -v
+
+#    -DSPHINX_WARNINGS_AS_ERRORS=OFF \
+}
+
+check() {
+  cd "$srcdir/build"
+  #ninja check
+}
+
+package() {
+  pkgdesc="Collection of modular and reusable compiler and toolchain technologies"
+  depends=('perl')
+
+  cd "$srcdir/build"
+
+  DESTDIR="$pkgdir" ninja install
+  rm "$pkgdir/usr/bin/llvm-symbolizer"
+}
+
+# vim:set ts=2 sw=2 et:

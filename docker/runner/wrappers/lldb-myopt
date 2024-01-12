@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export UBSAN_OPTIONS=print_stacktrace=true
+lldb -o r -- opt -load "/home/coco/work/llvm-passes/obj/libllvm-passes.so" -S "$@"
