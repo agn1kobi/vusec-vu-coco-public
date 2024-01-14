@@ -1,6 +1,6 @@
 from util import ASTTransformer
 from fennec_ast import Type, Operator, VarDef, ArrayDef, Assignment, Modification, \
-        If, Block, VarUse, BinaryOp, IntConst, Return
+        If, Block, VarUse, BinaryOp, IntConst, Return, While
 
 
 class Desugarer(ASTTransformer):
@@ -30,3 +30,24 @@ class Desugarer(ASTTransformer):
         # to:   lhs = lhs op rhs
         self.visit_children(m)
         return Assignment(m.ref, BinaryOp(m.ref, m.op, m.value)).at(m)
+    
+    def visitFor(self, node):
+        # from: for(int type ID = INTCONST to INTCONST) {body}
+        # to: {
+        # int type ID = INTCONST
+        # while(ID < INTCONST) {
+        # body
+        # ID = ID + 1
+        # }
+        #}
+        self.visit_children(node)
+        if isinstance(node.entry, str):
+            entry = VarUse(node.entry)
+        init_ass = VarDef(Type.get('int'), str(entry), node.lexpr).at(node)
+        cng = Assignment(entry, BinaryOp(entry, Operator('+'), IntConst(1))).at(node)
+        while_body = Block([node.body, cng]).at(node)
+        while_cond = BinaryOp(entry, Operator("<"), node.rexpr).at(node)
+        while_stat = While(while_cond, while_body).at(node)
+        while_stat.make_desugar(entry)
+        final_block = Block([init_ass, while_stat]).at(node)
+        return final_block

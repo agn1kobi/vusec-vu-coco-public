@@ -228,9 +228,11 @@ class IRGen(ASTTransformer):
             eq = ast.Operator.get('==')
             false = self.makebool(False)
             return self.visit(ast.BinaryOp(node.value, eq, false).at(node))
-        if node.op == '-':
+        if node.op == '-' and str(node.ty) != 'float':
             return self.builder.neg(self.visit(node.value))
-
+        elif node.op == '-':
+            zero = ir.Constant(self.getty(node.ty), 0)
+            return self.builder.fsub(zero, self.visit(node.value))
         assert node.op == '~'
         return self.builder.not_(self.visit(node.value))
 
@@ -246,17 +248,63 @@ class IRGen(ASTTransformer):
         if op == '||':
             yes = self.makebool(True)
             return self.lazy_conditional(node, node.lhs, yes, node.rhs)
-
+        
+        lhs_ty = node.lhs.ty
+        rhs_ty = node.rhs.ty
         self.visit_children(node)
 
-        if op.is_equality() or op.is_relational():
-            return b.icmp_signed(op.op, node.lhs, node.rhs)
+        if str(lhs_ty) != 'float' and str(rhs_ty) != 'float':
+            if op.is_equality() or op.is_relational():
+                return b.icmp_signed(op.op, node.lhs, node.rhs)
+            
+            callbacks = {'+': b.add, '-': b.sub, '*': b.mul, '/': b.sdiv, '%': b.srem}
+            return callbacks[op.op](node.lhs, node.rhs)
+        else:
+            if op.is_equality() or op.is_relational():
+                if op == "!=":
+                    return b.fcmp_unordered("!=", node.lhs, node.rhs)
+                else:
+                    return b.fcmp_ordered(op.op, node.lhs, node.rhs)
+                
+            callbacks = { '+': b.fadd, '-': b.fsub, '*': b.fmul, '/': b.fdiv, '%': b.frem }
+            return callbacks[op.op](node.lhs, node.rhs)
+        
+    def visitWhile(self, node):
+        prefix = self.builder.block.name
+        while_cond = self.add_block(prefix + '.wcond')
+        while_body = self.add_block(prefix + '.wbody')
+        while_end = self.add_block(prefix + '.wendbody')
+        self.loops.append((while_cond, while_end))
+        self.builder.branch(while_cond)
+        self.builder.position_at_start(while_cond)
+        cond = self.visit_before(node.cond, while_body)
+        self.builder.cbranch(cond, while_body, while_end)
+        self.builder.position_at_start(while_body)
+        if node.track_for is not None:
+            self.track_for_data.append(node.track_for)
+        self.visit_before(node.body, while_end)
+        if node.track_for is not None:
+            self.track_for_data.remove(node.track_for)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(while_cond)
+        self.builder.position_at_start(while_end)
 
-        callbacks = {
-            '+': b.add, '-': b.sub, '*': b.mul, '/': b.sdiv, '%': b.srem
-        }
 
-        return callbacks[op.op](node.lhs, node.rhs)
+    def visitDoWhile(self, node):
+        prefix = self.builder.block.name
+        do_while_cond = self.add_block(prefix + '.dwcond')
+        do_while_body = self.add_block(prefix + '.dwbody')
+        do_while_end = self.add_block(prefix + '.dwendbody')
+        self.loops.append((do_while_cond, do_while_end))
+        self.builder.branch(do_while_body)
+        self.builder.position_at_start(do_while_cond)
+        cond = self.visit_before(node.cond, do_while_body)
+        self.builder.cbranch(cond, do_while_body, do_while_end)
+        self.builder.position_at_start(do_while_body)
+        self.visit_before(node.body, do_while_end)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(do_while_cond)
+        self.builder.position_at_start(do_while_end)
 
     def lazy_conditional(self, node, cond, yesval, noval):
         b = self.builder

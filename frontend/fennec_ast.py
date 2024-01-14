@@ -489,6 +489,46 @@ class StringConst(Const):
     @classmethod
     def escape(cls, s):
         return s.translate(cls.trans)
+    
+
+class While(Statement):
+    children = ['cond', 'body']
+    types = dict(cond='Expression', body='Block')
+
+    def __str__(self):
+        return 'while ({0.cond}) {0.body}'.format(self)
+
+    def make_desugar(self, entry):
+        self.track_for = entry
+
+class For(Statement):
+    children = ['entry', 'lexpr', 'rexpr', 'body']
+    types = dict(entry='str', lexpr='Expression', rexpr='Expression', body='Block')
+
+    def __str__(self):
+        return 'for (int {0.entry} = {0.lexpr} to {0.rexpr}) {0.body}'.format(self)
+
+
+class DoWhile(Statement):
+    children = ['body','cond']
+    types = dict(body='Block', cond='Expression')
+
+    def __str__(self):
+        return 'do {0.body} while ({0.cond});'.format(self)
+
+class Break(Statement):
+    children = []
+    types = dict()
+
+    def __str__(self):
+         return 'break;'
+
+class Continue(Statement):
+    children = []
+    types = dict()
+
+    def __str__(self):
+        return 'continue;'
 
 
 class DeleteNode(Node):
