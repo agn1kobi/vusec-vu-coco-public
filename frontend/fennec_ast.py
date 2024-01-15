@@ -9,7 +9,7 @@ class Type(object):
     can also pass array types like 'int[]' to `get` which will return an
     `ArrayType`.
     '''
-    base_types = frozenset(['bool', 'char', 'int', 'void', 'float'])
+    base_types = frozenset(['bool', 'char', 'int', 'void','float'])
     int_bits = 32
     cache = {}
 
@@ -297,6 +297,10 @@ class Param(Node):
 
     def __str__(self):
         return '{0._type} {0.name}'.format(self)
+    
+#int a(int arg1, int arg2) {
+#   return a + b;
+#}
 
 
 class Statement(Node):
@@ -424,6 +428,8 @@ class FunCall(Expression):
 
     def __str__(self):
         return '%s(%s)' % (self.name, ', '.join(map(str, self.args)))
+    
+    #a(5,4)
 
 
 class Const(Expression):
@@ -452,7 +458,6 @@ class IntConst(Const):
 
     def __str__(self):
         return str(self.value)
-    
 
 class FloatConst(Const):
     children = ['value']
@@ -489,9 +494,9 @@ class StringConst(Const):
     @classmethod
     def escape(cls, s):
         return s.translate(cls.trans)
-    
 
 class While(Statement):
+    track_for = None
     children = ['cond', 'body']
     types = dict(cond='Expression', body='Block')
 
@@ -500,6 +505,7 @@ class While(Statement):
 
     def make_desugar(self, entry):
         self.track_for = entry
+        
 
 class For(Statement):
     children = ['entry', 'lexpr', 'rexpr', 'body']
@@ -517,16 +523,10 @@ class DoWhile(Statement):
         return 'do {0.body} while ({0.cond});'.format(self)
 
 class Break(Statement):
-    children = []
-    types = dict()
-
     def __str__(self):
          return 'break;'
 
 class Continue(Statement):
-    children = []
-    types = dict()
-
     def __str__(self):
         return 'continue;'
 

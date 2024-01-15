@@ -1,0 +1,12 @@
+extern int printf(char[] format, ...);
+
+int main() {
+    int a = 0;
+    do {
+        printf("%d\n", a);
+        if(a == 3)
+            break;
+        a += 1;
+    } while (a < 5);
+    return 0;
+}

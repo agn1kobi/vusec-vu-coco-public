@@ -26,13 +26,14 @@ class Desugarer(ASTTransformer):
         self.varcache_stack.pop()
 
     def visitModification(self, m):
-        # from: lhs op= rhs
-        # to:   lhs = lhs op rhs
+        # from: lhs op= rhs a += 1
+        # to:   lhs = lhs op rhs a= a + 1
         self.visit_children(m)
         return Assignment(m.ref, BinaryOp(m.ref, m.op, m.value)).at(m)
     
     def visitFor(self, node):
         # from: for(int type ID = INTCONST to INTCONST) {body}
+
         # to: {
         # int type ID = INTCONST
         # while(ID < INTCONST) {

@@ -34,6 +34,7 @@ class IRGen(ASTTransformer):
         self.zero = self.getint(0)
         self.memset = None
         self.loops = []
+        self.track_for = []
 
     @classmethod
     def compile(cls, module_name, program):
@@ -125,6 +126,8 @@ class IRGen(ASTTransformer):
 
     def visitModification(self, node):
         raise NotImplementedError  # should be desugared
+    def visitFor(self, node):
+        raise NotImplementedError #should bedesugared
 
     def visitIf(self, node):
         # first add the necessary basic blocks so that we can insert jumps to
@@ -155,6 +158,83 @@ class IRGen(ASTTransformer):
 
         # go to the end block to emit further instructions
         self.builder.position_at_start(bend)
+
+    def visitWhile(self, node):
+        
+        prefix = self.builder.block.name
+        
+        whileCond = self.add_block(prefix + '.wcond')
+        whileBody = self.add_block(prefix + '.wbody')
+        
+        whileEnd = self.add_block(prefix + '.wendbody')
+        
+        self.loops.append((whileCond, whileEnd))
+        
+        self.builder.branch(whileCond)
+        self.builder.position_at_start(whileCond)
+        
+        condition = self.visit_before(node.cond, whileBody)
+        
+        self.builder.cbranch(condition, whileBody, whileEnd)
+        self.builder.position_at_start(whileBody)
+        
+        if node.track_for is not None:
+            self.track_for.append(node.track_for)
+        self.visit_before(node.body, whileEnd)
+        
+        # if node.track_for is not None:
+        #     self.track_for.remove(node.track_for)
+        
+        if not self.builder.block.is_terminated:
+            self.builder.branch(whileCond)
+        
+        self.builder.position_at_start(whileEnd)
+
+    def visitBreak(self, node):
+        if not self.loops:
+            # If there are no loops, it's an error to have a break statement.
+            # You may want to raise an exception or handle this case appropriately.
+            raise RuntimeError("Break statement outside of loop")
+
+        # Get the exit block of the innermost loop
+        loop_exit_block = self.loops[-1][1]
+
+        # Create an unconditional branch to the exit block
+        self.builder.branch(loop_exit_block)
+
+        # Set the insertion point to a new basic block after the loop exit block
+        new_block = self.add_block("break_after_loop")
+        self.builder.position_at_start(new_block)
+
+        # Clear the loop information as we are outside the loop now
+        self.loops.pop()
+
+        # You may need to handle other bookkeeping or specific requirements
+        # related to your LLVM IR generation.
+
+        return None  # Break statement doesn't produce a value
+    
+    def visitContinue(self, node):
+        if not self.loops:
+            # If there are no loops, it's an error to have a continue statement.
+            # You may want to raise an exception or handle this case appropriately.
+            raise RuntimeError("Continue statement outside of loop")
+
+        # Get information about the innermost loop
+        loop_start_block, loop_exit_block = self.loops[-1]
+
+        # Create an unconditional branch to the loop start block
+        self.builder.branch(loop_start_block)
+
+        # Set the insertion point to a new basic block after the loop exit block
+        new_block = self.add_block("continue_after_loop")
+        self.builder.position_at_start(new_block)
+
+        # You may need to handle other bookkeeping or specific requirements
+        # related to your LLVM IR generation.
+
+        return None  # Continue statement doesn't produce a value
+
 
     def visitReturn(self, node):
         self.visit_children(node)
@@ -228,11 +308,13 @@ class IRGen(ASTTransformer):
             eq = ast.Operator.get('==')
             false = self.makebool(False)
             return self.visit(ast.BinaryOp(node.value, eq, false).at(node))
-        if node.op == '-' and str(node.ty) != 'float':
-            return self.builder.neg(self.visit(node.value))
-        elif node.op == '-':
-            zero = ir.Constant(self.getty(node.ty), 0)
-            return self.builder.fsub(zero, self.visit(node.value))
+
+        if node.op == '-':
+            if str(node.ty) != 'float':
+                return self.builder.neg(self.visit(node.value))
+            zeroValue = ir.Constant(self.getty(node.ty), 0)
+            return self.builder.fsub(zeroValue, self.visit(node.value))
+
         assert node.op == '~'
         return self.builder.not_(self.visit(node.value))
 
@@ -248,16 +330,18 @@ class IRGen(ASTTransformer):
         if op == '||':
             yes = self.makebool(True)
             return self.lazy_conditional(node, node.lhs, yes, node.rhs)
+
+        lhsTy = node.lhs.ty
+        rhsTy = node.rhs.ty
         
-        lhs_ty = node.lhs.ty
-        rhs_ty = node.rhs.ty
         self.visit_children(node)
 
-        if str(lhs_ty) != 'float' and str(rhs_ty) != 'float':
+        if str(lhsTy) != 'float' and str(rhsTy) != 'float':
             if op.is_equality() or op.is_relational():
                 return b.icmp_signed(op.op, node.lhs, node.rhs)
-            
-            callbacks = {'+': b.add, '-': b.sub, '*': b.mul, '/': b.sdiv, '%': b.srem}
+            callbacks = {
+                '+': b.add, '-': b.sub, '*': b.mul, '/': b.sdiv, '%': b.srem
+            }
             return callbacks[op.op](node.lhs, node.rhs)
         else:
             if op.is_equality() or op.is_relational():
@@ -265,46 +349,10 @@ class IRGen(ASTTransformer):
                     return b.fcmp_unordered("!=", node.lhs, node.rhs)
                 else:
                     return b.fcmp_ordered(op.op, node.lhs, node.rhs)
-                
+
             callbacks = { '+': b.fadd, '-': b.fsub, '*': b.fmul, '/': b.fdiv, '%': b.frem }
             return callbacks[op.op](node.lhs, node.rhs)
         
-    def visitWhile(self, node):
-        prefix = self.builder.block.name
-        while_cond = self.add_block(prefix + '.wcond')
-        while_body = self.add_block(prefix + '.wbody')
-        while_end = self.add_block(prefix + '.wendbody')
-        self.loops.append((while_cond, while_end))
-        self.builder.branch(while_cond)
-        self.builder.position_at_start(while_cond)
-        cond = self.visit_before(node.cond, while_body)
-        self.builder.cbranch(cond, while_body, while_end)
-        self.builder.position_at_start(while_body)
-        if node.track_for is not None:
-            self.track_for_data.append(node.track_for)
-        self.visit_before(node.body, while_end)
-        if node.track_for is not None:
-            self.track_for_data.remove(node.track_for)
-        if not self.builder.block.is_terminated:
-            self.builder.branch(while_cond)
-        self.builder.position_at_start(while_end)
-
-
-    def visitDoWhile(self, node):
-        prefix = self.builder.block.name
-        do_while_cond = self.add_block(prefix + '.dwcond')
-        do_while_body = self.add_block(prefix + '.dwbody')
-        do_while_end = self.add_block(prefix + '.dwendbody')
-        self.loops.append((do_while_cond, do_while_end))
-        self.builder.branch(do_while_body)
-        self.builder.position_at_start(do_while_cond)
-        cond = self.visit_before(node.cond, do_while_body)
-        self.builder.cbranch(cond, do_while_body, do_while_end)
-        self.builder.position_at_start(do_while_body)
-        self.visit_before(node.body, do_while_end)
-        if not self.builder.block.is_terminated:
-            self.builder.branch(do_while_cond)
-        self.builder.position_at_start(do_while_end)
 
     def lazy_conditional(self, node, cond, yesval, noval):
         b = self.builder
@@ -344,9 +392,10 @@ class IRGen(ASTTransformer):
 
     def visitIntConst(self, node):
         return ir.Constant(self.getty(node.ty), node.value)
-
+    
     def visitFloatConst(self, node):
         return ir.Constant(self.getty(node.ty), node.value)
+    
 
     def visitStringConst(self, node):
         # name is unique, based on simple counter
@@ -369,6 +418,31 @@ class IRGen(ASTTransformer):
 
         # return pointer to start of string (GEP gets rid of array type)
         return self.builder.gep(s, (self.zero, self.zero), True, name)
+        
+
+    def visitDoWhile(self, node):
+        
+        prefix = self.builder.block.name
+        
+        doWhileCond = self.add_block(prefix + '.dwcond')
+        doWhileBody = self.add_block(prefix + '.dwbody')
+        doWhileEnd = self.add_block(prefix + '.dwendbody')
+        
+        self.loops.append((doWhileCond, doWhileEnd))
+        self.builder.branch(doWhileBody)
+        self.builder.position_at_start(doWhileCond)
+        
+        condition = self.visit_before(node.cond, doWhileBody)
+        
+        self.builder.cbranch(condition, doWhileBody, doWhileEnd)
+        self.builder.position_at_start(doWhileBody)
+        
+        self.visit_before(node.body, doWhileEnd)
+        
+        if not self.builder.block.is_terminated:
+            self.builder.branch(doWhileCond)
+            
+        self.builder.position_at_start(doWhileEnd)
 
     def getty(self, ty):
         if isinstance(ty, ast.ArrayType):
@@ -384,7 +458,7 @@ class IRGen(ASTTransformer):
 
         if str(ty) == 'int':
             return ir.IntType(ast.Type.int_bits)
-        
+
         if str(ty) == 'float':
             return ir.DoubleType()
 

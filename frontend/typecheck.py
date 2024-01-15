@@ -241,35 +241,33 @@ class TypeChecker(ASTVisitor):
         node.ty = ArrayType.get(self.tchar)
 
     def visitWhile(self,node):
-        self.visit_children(node)
-        self.check_type(node.cond, self.tbool)
         loop_status = self.in_loop
         self.in_loop = True
         self.nested_loop += 1
+        self.visit_children(node)
+        self.check_type(node.cond, self.tbool)
         if not loop_status:
             self.in_loop = False
             self.nested_loop = 0
 
-
-
     def visitDoWhile(self,node):
-        self.visit_children(node)
-        self.check_type(node.cond, self.tbool)
         loop_status = self.in_loop
         self.in_loop = True
         self.nested_loop += 1
+        self.visit_children(node)
+        self.check_type(node.cond, self.tbool)
         if not loop_status:
             self.in_loop = False
             self.nested_loop = 0
 
     def visitFor(self, node):
+        loop_status = self.in_loop
+        self.in_loop = True
+        self.nested_loop += 1
         self.visit_children(node)
         entry_type = self.get_variable_type(node.entry)
         self.check_type(node.entry, Type.get('int'))
         self.check_type(node.cond, self.tbool)
-        loop_status = self.in_loop
-        self.in_loop = True
-        self.nested_loop += 1
         if not loop_status:
             self.in_loop = False
             self.nested_loop = 0
