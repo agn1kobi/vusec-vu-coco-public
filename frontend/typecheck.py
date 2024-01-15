@@ -275,9 +275,9 @@ class TypeChecker(ASTVisitor):
     def visitBreak(self,node):
         self.visit_children(node)
         if not self.in_loop and self.nested_loop == 0:
-            raise NodeError(node, 'Error: break out of loop')
+            raise NodeError(node, 'Error: break not inside a loop')
 
     def visitContinue(self,node):
         self.visit_children(node)
         if not self.in_loop and self.nested_loop == 0:
-            raise NodeError(node, 'Error: continue out of loop')
+            raise NodeError(node, 'Error: continue not inside a loop')

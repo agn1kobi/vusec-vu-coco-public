@@ -165,7 +165,6 @@ class IRGen(ASTTransformer):
         
         whileCond = self.add_block(prefix + '.wcond')
         whileBody = self.add_block(prefix + '.wbody')
-        
         whileEnd = self.add_block(prefix + '.wendbody')
         
         self.loops.append((whileCond, whileEnd))
@@ -182,8 +181,8 @@ class IRGen(ASTTransformer):
             self.track_for.append(node.track_for)
         self.visit_before(node.body, whileEnd)
         
-        # if node.track_for is not None:
-        #     self.track_for.remove(node.track_for)
+        if node.track_for is not None:
+            self.track_for.remove(node.track_for)
         
         if not self.builder.block.is_terminated:
             self.builder.branch(whileCond)
@@ -192,49 +191,28 @@ class IRGen(ASTTransformer):
 
     def visitBreak(self, node):
         if not self.loops:
-            # If there are no loops, it's an error to have a break statement.
-            # You may want to raise an exception or handle this case appropriately.
-            raise RuntimeError("Break statement outside of loop")
+            return
+        exit_loc = self.loops[-1][1]
+        self.builder.branch(exit_loc)
 
-        # Get the exit block of the innermost loop
-        loop_exit_block = self.loops[-1][1]
+        new_loc = self.add_block("break")
+        self.builder.position_at_start(new_loc)
 
-        # Create an unconditional branch to the exit block
-        self.builder.branch(loop_exit_block)
-
-        # Set the insertion point to a new basic block after the loop exit block
-        new_block = self.add_block("break_after_loop")
-        self.builder.position_at_start(new_block)
-
-        # Clear the loop information as we are outside the loop now
         self.loops.pop()
-
-        # You may need to handle other bookkeeping or specific requirements
-        # related to your LLVM IR generation.
-
-        return None  # Break statement doesn't produce a value
+        return
     
     def visitContinue(self, node):
         if not self.loops:
-            # If there are no loops, it's an error to have a continue statement.
-            # You may want to raise an exception or handle this case appropriately.
-            raise RuntimeError("Continue statement outside of loop")
+            return
 
-        # Get information about the innermost loop
-        loop_start_block, loop_exit_block = self.loops[-1]
+        start_loc, end_loc = self.loops[-1]
 
-        # Create an unconditional branch to the loop start block
-        self.builder.branch(loop_start_block)
+        self.builder.branch(start_loc)
 
-        # Set the insertion point to a new basic block after the loop exit block
-        new_block = self.add_block("continue_after_loop")
-        self.builder.position_at_start(new_block)
+        new_loc = self.add_block("continue")
+        self.builder.position_at_start(new_loc)
 
-        # You may need to handle other bookkeeping or specific requirements
-        # related to your LLVM IR generation.
-
-        return None  # Continue statement doesn't produce a value
-
+        return
 
     def visitReturn(self, node):
         self.visit_children(node)

@@ -503,8 +503,8 @@ class While(Statement):
     def __str__(self):
         return 'while ({0.cond}) {0.body}'.format(self)
 
-    def make_desugar(self, entry):
-        self.track_for = entry
+    def make_desugar(self, cng):
+        self.track_for = cng
         
 
 class For(Statement):
