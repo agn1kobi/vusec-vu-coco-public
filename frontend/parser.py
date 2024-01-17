@@ -261,7 +261,6 @@ def p_intconst(p):
     p[0] = ast.IntConst(int(p[1])).at(loc(p))
 
 def p_floatconst(p):
-    '''expr : FLOATCONST'''
     p[0] = ast.FloatConst(float(p[1])).at(loc(p))
 
 
@@ -300,23 +299,18 @@ def lhs(p):
     return p.slice[0].type
 
 def p_for(p):
-    '''statement : FOR LPAREN type ID ASSIGN expr TO expr RPAREN statement %prec FOR'''
     p[0] = ast.For(p[4], p[6], p[8], block(p[10])).at(loc(p, 1, 9))
 
 def p_do_while(p):
-    '''statement : DO statement WHILE LPAREN expr RPAREN SEMICOL'''
     p[0] = ast.DoWhile(block(p[2]), p[5]).at(loc(p, 3, 6))
 
 def p_while(p):
-    '''statement : WHILE LPAREN expr RPAREN statement %prec WHILE'''
     p[0] = ast.While(p[3], block(p[5])).at(loc(p, 1))
 
 def p_break(p):
-    '''statement : BREAK SEMICOL'''
     p[0] = ast.Break().at(loc(p,1))
 
 def p_continue(p):
-    '''statement : CONTINUE SEMICOL'''
     p[0] = ast.Continue().at(loc(p,1))
 
 
