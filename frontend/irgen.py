@@ -34,7 +34,7 @@ class IRGen(ASTTransformer):
         self.zero = self.getint(0)
         self.memset = None
         self.loops = []
-        self.track_for = ["empty"]
+        self.for_loop_incrementor = ["empty"]
 
     @classmethod
     def compile(cls, module_name, program):
@@ -163,59 +163,59 @@ class IRGen(ASTTransformer):
         
         prefix = self.builder.block.name
         
-        doWhileCond = self.add_block(prefix + '.dwcond')
-        doWhileBody = self.add_block(prefix + '.dwbody')
-        doWhileEnd = self.add_block(prefix + '.dwendbody')
+        do_while_condition = self.add_block(prefix + '.do_while_condition')
+        do_while_body = self.add_block(prefix + '.do_while_body')
+        do_while_end = self.add_block(prefix + '.do_while_end')
                 
-        self.loops.append((doWhileCond, doWhileEnd))
-        self.track_for.append("empty")
-        self.builder.branch(doWhileBody)
-        self.builder.position_at_start(doWhileCond)
+        self.loops.append((do_while_condition, do_while_end))
+        self.for_loop_incrementor.append("empty")
+        self.builder.branch(do_while_body)
+        self.builder.position_at_start(do_while_condition)
         
-        condition = self.visit_before(node.cond, doWhileBody)
+        condition = self.visit_before(node.cond, do_while_body)
         
-        self.builder.cbranch(condition, doWhileBody, doWhileEnd)
-        self.builder.position_at_start(doWhileBody)
+        self.builder.cbranch(condition, do_while_body, do_while_end)
+        self.builder.position_at_start(do_while_body)
         
-        self.visit_before(node.body, doWhileEnd)
+        self.visit_before(node.body, do_while_end)
         
         if not self.builder.block.is_terminated:
-            self.builder.branch(doWhileCond)
+            self.builder.branch(do_while_condition)
             
-        self.builder.position_at_start(doWhileEnd)
+        self.builder.position_at_start(do_while_end)
         
     def visitWhile(self, node):
         prefix = self.builder.block.name
-        whileCond = self.add_block(prefix + '.wcond')
-        whileBody = self.add_block(prefix + '.wbody')
-        whileIncrement = self.add_block(prefix + '.incr') if node.track_for is not None else None
-        whileEnd = self.add_block(prefix + '.wendbody')
+        while_condition = self.add_block(prefix + '.while_condition')
+        while_body = self.add_block(prefix + '.while_body')
+        for_loop_increment = self.add_block(prefix + '.for_loop_incrementor') if node.track_for is not None else None
+        while_end = self.add_block(prefix + '.while_end_body')
 
-        self.loops.append((whileCond, whileEnd))
-        self.builder.branch(whileCond)
-        self.builder.position_at_start(whileCond)
-        condition = self.visit_before(node.cond, whileBody)
+        self.loops.append((while_condition, while_end))
+        self.builder.branch(while_condition)
+        self.builder.position_at_start(while_condition)
+        condition = self.visit_before(node.cond, while_body)
         
-        self.builder.cbranch(condition, whileBody, whileEnd)
-        self.builder.position_at_start(whileBody)
+        self.builder.cbranch(condition, while_body, while_end)
+        self.builder.position_at_start(while_body)
         if node.track_for is not None:
-            self.track_for.append(whileIncrement)
+            self.for_loop_incrementor.append(for_loop_increment)
             if node.body.statements:
-                self.visit_before(node.body.statements[:-1], whileIncrement)
-                self.builder.branch(whileIncrement)
-                self.builder.position_at_start(whileIncrement)
-                self.visit_before(node.body.statements[-1], whileEnd)
+                self.visit_before(node.body.statements[:-1], for_loop_increment)
+                self.builder.branch(for_loop_increment)
+                self.builder.position_at_start(for_loop_increment)
+                self.visit_before(node.body.statements[-1], while_end)
             else:
-                self.track_for.append("empty")
-                self.builder.branch(whileEnd)
+                self.for_loop_incrementor.append("empty")
+                self.builder.branch(while_end)
         else:
-            self.track_for.append("empty")
-            self.visit_before(node.body, whileEnd)
+            self.for_loop_incrementor.append("empty")
+            self.visit_before(node.body, while_end)
 
         if not self.builder.block.is_terminated:
-            self.builder.branch(whileCond)
+            self.builder.branch(while_condition)
         
-        self.builder.position_at_start(whileEnd)
+        self.builder.position_at_start(while_end)
 
 
 
@@ -223,27 +223,24 @@ class IRGen(ASTTransformer):
         if not self.loops:
             return
         
-        start_loc = self.loops[-1][0]
-        last_track_for = self.track_for[-1]
-        if last_track_for != "empty":
-            self.builder.branch(last_track_for)
+        start_label = self.loops[-1][0]
+        incrementor_label = self.for_loop_incrementor[-1]
+        if incrementor_label != "empty":
+            self.builder.branch(incrementor_label)
         else:
-            self.builder.branch(start_loc)
+            self.builder.branch(start_label)
     
-        new_loc = self.add_block("continue")
-        self.builder.position_at_start(new_loc)
-
-        return
+        continue_label = self.add_block("continue")
+        self.builder.position_at_start(continue_label)
 
     def visitBreak(self, node):
         if not self.loops:
             return
-        exit_loc = self.loops[-1][1]
-        self.builder.branch(exit_loc)
+        end_label = self.loops[-1][1]
+        self.builder.branch(end_label)
 
-        new_loc = self.add_block("break")
-        self.builder.position_at_start(new_loc)
-        return
+        break_label = self.add_block("break")
+        self.builder.position_at_start(break_label)
 
     def visitReturn(self, node):
         self.visit_children(node)

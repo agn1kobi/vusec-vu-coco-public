@@ -490,15 +490,15 @@ class StringConst(Const):
         return s.translate(cls.trans)
 
 class While(Statement):
-    track_for = None
+    for_loop_incrementor = None
     children = ['cond', 'body']
     types = dict(cond='Expression', body='Block')
 
     def __str__(self):
         return 'while ({0.cond}) {0.body}'.format(self)
 
-    def make_desugar(self, incrementor):
-        self.track_for = incrementor
+    def was_for_loop(self, incrementor):
+        self.for_loop_incrementor = incrementor
 
 class For(Statement):
     children = ['entry', 'lexpr', 'rexpr', 'body']

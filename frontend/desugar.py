@@ -14,17 +14,17 @@ class Desugarer(ASTTransformer):
         if isinstance(node.entry, str):
             entry = VarUse(node.entry)
         
-        initialAssg = VarDef(Type.get('int'), str(entry), node.lexpr).at(node)
+        init_assignment = VarDef(Type.get('int'), str(entry), node.lexpr).at(node)
         incrementor = Assignment(entry, BinaryOp(entry, Operator('+'), IntConst(1))).at(node)
         
-        whileBody = Block([node.body, incrementor]).at(node)
-        whileCond = BinaryOp(entry, Operator("<"), node.rexpr).at(node)
+        while_body = Block([node.body, incrementor]).at(node)
+        while_condition = BinaryOp(entry, Operator("<"), node.rexpr).at(node)
         
-        while_stat = While(whileCond, whileBody).at(node)
-        while_stat.make_desugar(incrementor)
+        _while = While(while_condition, while_body).at(node)
+        _while.was_for_loop(incrementor)
         
-        finalBlock = Block([initialAssg, while_stat]).at(node)
-        return finalBlock
+        _while_ = Block([init_assignment, _while]).at(node)
+        return _while_
     
     def makevar(self, name):
         # Generate a variable starting with an underscore (which is not allowed
