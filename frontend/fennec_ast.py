@@ -297,10 +297,6 @@ class Param(Node):
 
     def __str__(self):
         return '{0._type} {0.name}'.format(self)
-    
-#int a(int arg1, int arg2) {
-#   return a + b;
-#}
 
 
 class Statement(Node):
@@ -428,8 +424,6 @@ class FunCall(Expression):
 
     def __str__(self):
         return '%s(%s)' % (self.name, ', '.join(map(str, self.args)))
-    
-    #a(5,4)
 
 
 class Const(Expression):
@@ -503,9 +497,8 @@ class While(Statement):
     def __str__(self):
         return 'while ({0.cond}) {0.body}'.format(self)
 
-    def make_desugar(self, cng):
-        self.track_for = cng
-        
+    def make_desugar(self, incrementor):
+        self.track_for = incrementor
 
 class For(Statement):
     children = ['entry', 'lexpr', 'rexpr', 'body']

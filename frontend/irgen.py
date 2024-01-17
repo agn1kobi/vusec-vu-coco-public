@@ -34,7 +34,7 @@ class IRGen(ASTTransformer):
         self.zero = self.getint(0)
         self.memset = None
         self.loops = []
-        self.track_for = []
+        self.track_for = ["empty"]
 
     @classmethod
     def compile(cls, module_name, program):
@@ -159,35 +159,81 @@ class IRGen(ASTTransformer):
         # go to the end block to emit further instructions
         self.builder.position_at_start(bend)
 
-    def visitWhile(self, node):
+    def visitDoWhile(self, node):
         
         prefix = self.builder.block.name
         
+        doWhileCond = self.add_block(prefix + '.dwcond')
+        doWhileBody = self.add_block(prefix + '.dwbody')
+        doWhileEnd = self.add_block(prefix + '.dwendbody')
+                
+        self.loops.append((doWhileCond, doWhileEnd))
+        self.track_for.append("empty")
+        self.builder.branch(doWhileBody)
+        self.builder.position_at_start(doWhileCond)
+        
+        condition = self.visit_before(node.cond, doWhileBody)
+        
+        self.builder.cbranch(condition, doWhileBody, doWhileEnd)
+        self.builder.position_at_start(doWhileBody)
+        
+        self.visit_before(node.body, doWhileEnd)
+        
+        if not self.builder.block.is_terminated:
+            self.builder.branch(doWhileCond)
+            
+        self.builder.position_at_start(doWhileEnd)
+        
+    def visitWhile(self, node):
+        prefix = self.builder.block.name
         whileCond = self.add_block(prefix + '.wcond')
         whileBody = self.add_block(prefix + '.wbody')
+        whileIncrement = self.add_block(prefix + '.incr') if node.track_for is not None else None
         whileEnd = self.add_block(prefix + '.wendbody')
-        
+
         self.loops.append((whileCond, whileEnd))
-        
         self.builder.branch(whileCond)
         self.builder.position_at_start(whileCond)
-        
         condition = self.visit_before(node.cond, whileBody)
         
         self.builder.cbranch(condition, whileBody, whileEnd)
         self.builder.position_at_start(whileBody)
-        
         if node.track_for is not None:
-            self.track_for.append(node.track_for)
-        self.visit_before(node.body, whileEnd)
-        
-        if node.track_for is not None:
-            self.track_for.remove(node.track_for)
-        
+            self.track_for.append(whileIncrement)
+            if node.body.statements:
+                self.visit_before(node.body.statements[:-1], whileIncrement)
+                self.builder.branch(whileIncrement)
+                self.builder.position_at_start(whileIncrement)
+                self.visit_before(node.body.statements[-1], whileEnd)
+            else:
+                self.track_for.append("empty")
+                self.builder.branch(whileEnd)
+        else:
+            self.track_for.append("empty")
+            self.visit_before(node.body, whileEnd)
+
         if not self.builder.block.is_terminated:
             self.builder.branch(whileCond)
         
         self.builder.position_at_start(whileEnd)
+
+
+
+    def visitContinue(self, node):
+        if not self.loops:
+            return
+        
+        start_loc = self.loops[-1][0]
+        last_track_for = self.track_for[-1]
+        if last_track_for != "empty":
+            self.builder.branch(last_track_for)
+        else:
+            self.builder.branch(start_loc)
+    
+        new_loc = self.add_block("continue")
+        self.builder.position_at_start(new_loc)
+
+        return
 
     def visitBreak(self, node):
         if not self.loops:
@@ -197,21 +243,6 @@ class IRGen(ASTTransformer):
 
         new_loc = self.add_block("break")
         self.builder.position_at_start(new_loc)
-
-        self.loops.pop()
-        return
-    
-    def visitContinue(self, node):
-        if not self.loops:
-            return
-
-        start_loc, end_loc = self.loops[-1]
-
-        self.builder.branch(start_loc)
-
-        new_loc = self.add_block("continue")
-        self.builder.position_at_start(new_loc)
-
         return
 
     def visitReturn(self, node):

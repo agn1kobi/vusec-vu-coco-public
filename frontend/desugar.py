@@ -7,6 +7,25 @@ class Desugarer(ASTTransformer):
     def __init__(self):
         self.varcache_stack = [{}]
 
+    def visitFor(self, node):
+
+        self.visit_children(node)
+        
+        if isinstance(node.entry, str):
+            entry = VarUse(node.entry)
+        
+        initialAssg = VarDef(Type.get('int'), str(entry), node.lexpr).at(node)
+        incrementor = Assignment(entry, BinaryOp(entry, Operator('+'), IntConst(1))).at(node)
+        
+        whileBody = Block([node.body, incrementor]).at(node)
+        whileCond = BinaryOp(entry, Operator("<"), node.rexpr).at(node)
+        
+        while_stat = While(whileCond, whileBody).at(node)
+        while_stat.make_desugar(incrementor)
+        
+        finalBlock = Block([initialAssg, while_stat]).at(node)
+        return finalBlock
+    
     def makevar(self, name):
         # Generate a variable starting with an underscore (which is not allowed
         # in the language itself, so should be unique). To make the variable
@@ -26,22 +45,7 @@ class Desugarer(ASTTransformer):
         self.varcache_stack.pop()
 
     def visitModification(self, m):
-        # from: lhs op= rhs a += 1
-        # to:   lhs = lhs op rhs a= a + 1
+        # from: lhs op= rhs
+        # to:   lhs = lhs op rhs
         self.visit_children(m)
         return Assignment(m.ref, BinaryOp(m.ref, m.op, m.value)).at(m)
-    
-    def visitFor(self, node):
-        self.visit_children(node)
-
-        if isinstance(node.entry, str):
-            entry = VarUse(node.entry)
-        
-        init_ass = VarDef(Type.get('int'), str(entry), node.lexpr).at(node)
-        cng = Assignment(entry, BinaryOp(entry, Operator('+'), IntConst(1))).at(node)
-        while_body = Block([node.body, cng]).at(node)
-        while_cond = BinaryOp(entry, Operator("<"), node.rexpr).at(node)
-        while_stat = While(while_cond, while_body).at(node)
-        while_stat.make_desugar(cng)
-        final_block = Block([init_ass, while_stat]).at(node)
-        return final_block
