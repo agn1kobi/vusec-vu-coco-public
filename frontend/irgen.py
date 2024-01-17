@@ -194,9 +194,9 @@ class IRGen(ASTTransformer):
         self.loops.append((while_condition, while_end))
         self.builder.branch(while_condition)
         self.builder.position_at_start(while_condition)
-        condition = self.visit_before(node.cond, while_body)
+        cond = self.visit_before(node.cond, while_body)
         
-        self.builder.cbranch(condition, while_body, while_end)
+        self.builder.cbranch(cond, while_body, while_end)
         self.builder.position_at_start(while_body)
         if node.track_for is not None:
             self.for_loop_incrementor.append(for_loop_increment)
