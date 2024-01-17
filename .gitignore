@@ -6,6 +6,7 @@ obj/
 bootstrap.log
 *.pyc
 coco.tar.gz
+handin-1.tar.gz
 framework.tar.gz
 .clangd
 compile_commands.json
@@ -15,3 +16,4 @@ compile_commands.json
 *.outerr
 *.outout
 *.user
+run.sh
