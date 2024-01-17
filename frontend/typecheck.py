@@ -25,7 +25,7 @@ class TypeChecker(ASTVisitor):
         self.tfloat = Type.get('float')
         self.curfn = None
         self.in_loop = False
-        self.nested_loop = 0
+        self.loop_inside_loop = 0
 
     def operand_types(self, operator):
         if operator.is_logical():
@@ -241,43 +241,43 @@ class TypeChecker(ASTVisitor):
         node.ty = ArrayType.get(self.tchar)
 
     def visitWhile(self,node):
-        loop_status = self.in_loop
+        in_loop = self.in_loop
         self.in_loop = True
-        self.nested_loop += 1
+        self.loop_inside_loop += 1
         self.visit_children(node)
         self.check_type(node.cond, self.tbool)
-        if not loop_status:
+        if not in_loop:
             self.in_loop = False
-            self.nested_loop = 0
+            self.loop_inside_loop = 0
 
     def visitDoWhile(self,node):
-        loop_status = self.in_loop
+        in_loop = self.in_loop
         self.in_loop = True
-        self.nested_loop += 1
+        self.loop_inside_loop += 1
         self.visit_children(node)
         self.check_type(node.cond, self.tbool)
-        if not loop_status:
+        if not in_loop:
             self.in_loop = False
-            self.nested_loop = 0
+            self.loop_inside_loop = 0
 
     def visitFor(self, node):
-        loop_status = self.in_loop
+        in_loop = self.in_loop
         self.in_loop = True
-        self.nested_loop += 1
+        self.loop_inside_loop += 1
         self.visit_children(node)
         entry_type = self.get_variable_type(node.entry)
         self.check_type(node.entry, Type.get('int'))
         self.check_type(node.cond, self.tbool)
-        if not loop_status:
+        if not in_loop:
             self.in_loop = False
-            self.nested_loop = 0
+            self.loop_inside_loop = 0
 
     def visitBreak(self,node):
         self.visit_children(node)
-        if not self.in_loop and self.nested_loop == 0:
+        if not self.in_loop and self.loop_inside_loop == 0:
             raise NodeError(node, 'Error: break not inside a loop')
 
     def visitContinue(self,node):
         self.visit_children(node)
-        if not self.in_loop and self.nested_loop == 0:
+        if not self.in_loop and self.loop_inside_loop == 0:
             raise NodeError(node, 'Error: continue not inside a loop')

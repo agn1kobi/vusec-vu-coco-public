@@ -188,7 +188,7 @@ class IRGen(ASTTransformer):
         prefix = self.builder.block.name
         while_condition = self.add_block(prefix + '.while_condition')
         while_body = self.add_block(prefix + '.while_body')
-        for_loop_increment = self.add_block(prefix + '.for_loop_incrementor') if node.track_for is not None else None
+        for_loop_increment = self.add_block(prefix + '.for_loop_incrementor') if node.for_loop_incrementor is not None else None
         while_end = self.add_block(prefix + '.while_end_body')
 
         self.loops.append((while_condition, while_end))
@@ -198,7 +198,7 @@ class IRGen(ASTTransformer):
         
         self.builder.cbranch(cond, while_body, while_end)
         self.builder.position_at_start(while_body)
-        if node.track_for is not None:
+        if node.for_loop_incrementor is not None:
             self.for_loop_incrementor.append(for_loop_increment)
             if node.body.statements:
                 self.visit_before(node.body.statements[:-1], for_loop_increment)
