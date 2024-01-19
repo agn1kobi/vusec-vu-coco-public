@@ -1,5 +1,5 @@
 /**
- * ADCE implementation
+ * ADCE implementation.
  */
 
 #define DEBUG_TYPE "ADCEpass"
