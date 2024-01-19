@@ -85,5 +85,8 @@ echo -e "${INFO} Use 'make check-frontend' and 'make check-passes' to run tests.
 # The mount makes our dir persistent.
 docker run -w /home/coco/work --hostname coco -it \
   --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
-  --mount type=bind,source="$(pwd)"/.,target=/home/coco/work \
+  -v "$(pwd)":/home/coco/work:z \
   ${DOCKER_USER}/coco /usr/bin/${DOCKER_SHELL}
+
+
+ # --mount type=bind,source="$(pwd)"/.,target=/home/coco/work \
