@@ -60,7 +60,7 @@ bool LICMPass::isComputedOutsideLoop(Use *U, Loop *L, LoopInfo *LI) {
 
 bool LICMPass::isInvariant(Instruction *I, Loop *L, LoopInfo *LI) {
     bool ret = true;
-    if(!I->isBinaryOp() && !I->isShift() && !isa<SelectInst>(I) && !I->isCast() && !isa<GetElementPtrInst>(I)) {
+    if((!I->isBinaryOp() && !I->isShift() && !isa<SelectInst>(I) && !I->isCast() && !isa<GetElementPtrInst>(I) ) || (isa<LoadInst>(I) && dyn_cast<LoadInst>(I)->isVolatile())) {
         ret = false;
         return ret;
     }
@@ -97,7 +97,6 @@ bool LICMPass::runOnLoop(Loop *L, LPPassManager &LPM) {
                 LOG_LINE("The basic block is not inside a subloop");
                 BasicBlock::iterator iter = BB->begin();
                 while(!(iter == BB->end())) {
-
                     Instruction *I = dyn_cast<Instruction>(iter);
                     iter++;
                     if(I) {

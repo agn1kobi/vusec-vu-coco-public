@@ -55,12 +55,14 @@ bool ADCEPass::runOnFunction(Function &F) {
                 if(Instruction *ins = dyn_cast<Instruction>(use)) {
                     if(liveSet.count(ins) == 0) {
                         LOG_LINE("instruction" << *ins << "has been marked dead because is being used by a dead instructions and set to delete");
+                        LOG_LINE("not sure if its a good idea, check with TA");
                         deletelist.push_back(ins);
                         liveSet.insert(make_pair(ins, false));
                     }
                     else if(liveSet[ins] == false) {
                         //do nothing
                     }
+                    
                 }
             }
         }
@@ -92,6 +94,11 @@ bool ADCEPass::runOnFunction(Function &F) {
                     else if(liveSet[ins]) {
                         //do nothing
                     }
+                    // else if(liveSet[ins] == false) {
+                    //     LOG_LINE("instruction << *ins << was maked dead but is live somewhere else");
+                    //     worklist.push_back(ins);
+                    //     liveSet.insert(make_pair(ins, true));
+                    // }
                 }
             }
         }
