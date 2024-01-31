@@ -10,10 +10,10 @@
 #include "utils.h"
 
 namespace {
-    class ADCEPass : public ModulePass {
+    class DummyModulePass : public ModulePass {
     public:
         static char ID;
-        ADCEPass() : ModulePass(ID) {}
+        DummyModulePass() : ModulePass(ID) {}
         virtual bool runOnModule(Module &M) override;
 
     private:
@@ -26,7 +26,7 @@ namespace {
 /*
  * Finds all allocations in a function and inserts a call that prints its size.
  */
-bool ADCEPass::instrumentAllocations(Function &F) {
+bool DummyModulePass::instrumentAllocations(Function &F) {
     bool Changed = false;
 
     // Construct an IRBuilder (at a random insertion point) so we can reuse it
@@ -51,7 +51,7 @@ bool ADCEPass::instrumentAllocations(Function &F) {
     return Changed;
 }
 
-bool ADCEPass::runOnModule(Module &M) {
+bool DummyModulePass::runOnModule(Module &M) {
     // Retrieve a pointer to the helper function. The instrumentAllocations
     // function will insert calls to this function for every allocation. This
     // function is written in our runtime (runtime/dummy.c). To see its (LLVM)
@@ -85,5 +85,5 @@ bool ADCEPass::runOnModule(Module &M) {
 // to RegisterPass is the commandline switch to run this pass (e.g., opt
 // -coco-dummymodulepass, the second argument is a description shown in the help
 // text about this pass.
-char ADCEPass::ID = 0;
-static RegisterPass<ADCEPass> X("coco-dummymodulepass", "Example LLVM module pass that inserts prints for every allocation.");
+char DummyModulePass::ID = 0;
+static RegisterPass<DummyModulePass> X("coco-dummymodulepass", "Example LLVM module pass that inserts prints for every allocation.");
