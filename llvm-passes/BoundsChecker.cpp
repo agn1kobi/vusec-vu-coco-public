@@ -1,7 +1,10 @@
-#include "llvm/Pass.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/InstIterator.h"
-#include "llvm/Support/raw_ostream.h"
+/**
+ * Bounds checker implementation
+*/
+
+#define DEBUG_TYPE "BoundsChecker"
+#define EXPECTED_BLOCK_NUMS 16
+#include "utils.h"
 
 using namespace llvm;
 
@@ -13,70 +16,128 @@ namespace {
         virtual bool runOnModule(Module &M) override;
 
     private:
-        Function *BoundsCheckFunc;
+       Function *boundsCheckCall;
 
-        bool insertBoundsCheck(Instruction *I);
-        Value* getAccumulatedOffset(GetElementPtrInst *GEP);
+        bool instrumentGeps(Function &F);
+        Value *gepOffsetAccumulator(Value *V, IRBuilder<> &B);
+        Value *determineArraySize(Value *V, IRBuilder<> &B);
+        SmallVector<Value *, EXPECTED_BLOCK_NUMS> Visited;
+        Value *one;
     };
 }
 
-bool BoundsChecker::insertBoundsCheck(Instruction *I) {
-    if (isa<GetElementPtrInst>(I)) {
-        IRBuilder<> B(I);
-
-        // Get the accumulated offset for the GEP instruction
-        Value *Offset = getAccumulatedOffset(cast<GetElementPtrInst>(I));
-
-        // Create a new call to the bounds check function, with the offset as an argument
-        B.CreateCall(BoundsCheckFunc, { Offset });
-
-        return true;
+Value *BoundsChecker::determineArraySize(Value *V, IRBuilder<> &B) {
+    if(isa<AllocaInst>(V)) {
+        AllocaInst *AI = dyn_cast<AllocaInst>(V);
+        return AI->getArraySize();
     }
-    return false;
-}
-
-Value* BoundsChecker::getAccumulatedOffset(GetElementPtrInst *GEP) {
-    // Accumulate the offset recursively for GEP instructions
-    Value *Offset = nullptr;
-
-    // Iterate over the indices of the GEP instruction
-    for (unsigned i = 1; i < GEP->getNumOperands(); ++i) {
-        Value *Index = GEP->getOperand(i);
-
-        // If the index is a constant, add it to the accumulated offset
-        if (ConstantInt *CI = dyn_cast<ConstantInt>(Index)) {
-            if (!Offset)
-                Offset = CI;
-            else
-                Offset = BinaryOperator::CreateAdd(Offset, CI);
-        } else {
-            // If the index is not a constant, we can't determine the offset statically
-            // In a more complete implementation, you would handle dynamic offsets here.
-            // For now, just return a constant 0.
-            LLVMContext &C = GEP->getContext();
-            Offset = ConstantInt::get(Type::getInt32Ty(C), 0);
-            break;
+    else if (isa<GlobalVariable>(V)) {
+        GlobalVariable *GV = dyn_cast<GlobalVariable>(V);
+        if (GV->hasInitializer() && GV->getInitializer()->getType()->isArrayTy()) {
+            ArrayType *ArrType = cast<ArrayType>(GV->getInitializer()->getType());
+            return ConstantInt::get(B.getInt32Ty(), ArrType->getNumElements());
         }
     }
-
-    return Offset;
+    else if(isa<Constant>(V)) {
+        Constant *C = dyn_cast<Constant>(V);
+        if (ConstantInt *CI = dyn_cast<ConstantInt>(C)) {
+            return CI;
+        }else {
+            return B.getInt32(1);
+        }
+    }
+    else if(isa<Argument>(V)) {
+        Argument *Arg = dyn_cast<Argument>(V);
+        if(Arg->getParent()->getName() == "main" && Arg->getArgNo() == 1) {
+            Function *F = Arg->getParent();
+            Argument *arc = F->getArg(0);
+            Value *argc = dyn_cast<Value>(arc);
+            return B.CreateAdd(argc, one);
+        }
+        else {
+            Type *ArgType = Arg->getType();
+            if (ArgType->isArrayTy()) {
+                ArrayType *ArrType = cast<ArrayType>(ArgType);
+                return ConstantInt::get(B.getInt32Ty(), ArrType->getNumElements());
+            }
+        return B.getInt32(1);
+        }
+    }
+    else if(isa<LoadInst>(V)) {
+        report_fatal_error("Error: goon load");
+    }
+    else if(isa<GetElementPtrInst>(V)) {
+        GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(V);
+        return determineArraySize(GEP->getPointerOperand(), B);
+    }
+    return B.getInt32(0);
 }
 
+Value *BoundsChecker::gepOffsetAccumulator(Value *V, IRBuilder<> &B) {
+    if (isa<GetElementPtrInst>(V)) {
+        GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(V);
+        if (isa<GetElementPtrInst>(GEP->getOperand(0))) {
+            Value *accumulatedOffset = gepOffsetAccumulator(GEP->getOperand(0), B);
+            B.SetInsertPoint(GEP);
+            Value *result = B.CreateAdd(accumulatedOffset, GEP->getOperand(1));
+            return result;
+        } else {
+            return GEP->getOperand(1);
+        }
+    }
+    report_fatal_error("Error in calculating offsets");
+}
+
+bool BoundsChecker::instrumentGeps(Function &F) {
+    bool changed = false;
+
+    IRBuilder<> B(&F.getEntryBlock());
+
+    for (Instruction &II : instructions(F)) {
+        Instruction *I = &II;
+
+        if (GetElementPtrInst *AI = dyn_cast<GetElementPtrInst>(I)) {
+            
+            LOG_LINE("GEP FOUNDDD");
+
+
+            if (GlobalVariable *GV = dyn_cast<GlobalVariable>(AI->getPointerOperand())) {
+                if (GV->hasInitializer() && GV->getType()->getElementType()->isArrayTy()) {
+                    LOG_LINE(" THIS IS A GLOBAL STRING BOUNDS CHEKING NOT NEEDED");
+                    continue; 
+                }
+            }
+
+            Value *offset = gepOffsetAccumulator(AI, B);
+            Value *arraySize = determineArraySize(AI->getOperand(0), B);
+
+            B.SetInsertPoint(AI);
+            B.CreateCall(boundsCheckCall, {offset, arraySize} );
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+
 bool BoundsChecker::runOnModule(Module &M) {
+    
     LLVMContext &C = M.getContext();
     Type *VoidTy = Type::getVoidTy(C);
     Type *Int32Ty = Type::getInt32Ty(C);
+    one = ConstantInt::get(Type::getInt32Ty(M.getContext()), 1);
+    auto FnCallee = M.getOrInsertFunction("__coco_check_bounds",
+                                          VoidTy, Int32Ty, Int32Ty);
+    boundsCheckCall = cast<Function>(FnCallee.getCallee());
 
-    // Insert or get the bounds check function
-    auto FnCallee = M.getOrInsertFunction("bounds_check_function", VoidTy, Int32Ty);
-    BoundsCheckFunc = cast<Function>(FnCallee.getCallee());
+     bool Changed = false;
 
-    bool Changed = false;
+     for (Function &F : M) {
+        if (!shouldInstrument(&F))
+            continue;
 
-    for (Function &F : M) {
-        for (Instruction &I : instructions(F)) {
-            Changed |= insertBoundsCheck(&I);
-        }
+        LOG_LINE("Visiting function " << F.getName());
+        Changed |= instrumentGeps(F);
     }
 
     return Changed;
