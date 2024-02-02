@@ -21,7 +21,8 @@ namespace {
         bool instrumentGeps(Function &F);
         Value *gepOffsetAccumulator(Value *V, IRBuilder<> &B);
         Value *determineArraySize(Value *V, IRBuilder<> &B);
-        SmallVector<Value *, EXPECTED_BLOCK_NUMS> Visited;
+        //SmallVector<Value *, EXPECTED_BLOCK_NUMS> Visited;
+        DenseMap<Instruction *, Value *> allocaSize;
         Value *one;
     };
 }
@@ -95,23 +96,32 @@ bool BoundsChecker::instrumentGeps(Function &F) {
 
     for (Instruction &II : instructions(F)) {
         Instruction *I = &II;
-
-        if (GetElementPtrInst *AI = dyn_cast<GetElementPtrInst>(I)) {
+        if(isa<AllocaInst>(I)) {
+            //AllocaInst *AI = dyn_cast<AllocaInst>(I);
             
+        }
+        if(isa<CallInst>(I)) {
+           // CallInst *CI = dyn_cast<CallInst>(I);
+            LOG_LINE("CALL FOUNDDD");
+            //Function *func = CI->getCalledFunction();
+            
+        }
+        if (isa<GetElementPtrInst>(I)) {
+            GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I);
             LOG_LINE("GEP FOUNDDD");
 
 
-            if (GlobalVariable *GV = dyn_cast<GlobalVariable>(AI->getPointerOperand())) {
+            if (GlobalVariable *GV = dyn_cast<GlobalVariable>(GEP->getPointerOperand())) {
                 if (GV->hasInitializer() && GV->getType()->getElementType()->isArrayTy()) {
                     LOG_LINE(" THIS IS A GLOBAL STRING BOUNDS CHEKING NOT NEEDED");
                     continue; 
                 }
             }
 
-            Value *offset = gepOffsetAccumulator(AI, B);
-            Value *arraySize = determineArraySize(AI->getOperand(0), B);
+            Value *offset = gepOffsetAccumulator(GEP, B);
+            Value *arraySize = determineArraySize(GEP->getOperand(0), B);
 
-            B.SetInsertPoint(AI);
+            B.SetInsertPoint(GEP);
             B.CreateCall(boundsCheckCall, {offset, arraySize} );
             changed = true;
         }
@@ -135,7 +145,6 @@ bool BoundsChecker::runOnModule(Module &M) {
      for (Function &F : M) {
         if (!shouldInstrument(&F))
             continue;
-
         LOG_LINE("Visiting function " << F.getName());
         Changed |= instrumentGeps(F);
     }
