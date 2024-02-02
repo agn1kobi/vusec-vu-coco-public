@@ -18,33 +18,24 @@ namespace {
         static char ID;
         BoundsChecker() : ModulePass(ID) {}
         virtual bool runOnModule(Module &M) override;
-
-        vector<Function*> deletedFucntions;
-        vector<Function*> addedFunctions;
-
-        bool isChanged = false;
-
-
     private:
        Function *boundsCheckCall;
-
         Value *getNextOperand(Argument *Arg, Function *Func);
-
         bool instrumentGeps(Function &F);
         Value *gepOffsetAccumulator(Value *V, IRBuilder<> &B);
         Value *determineArraySize(Value *V, IRBuilder<> &B, map<Value*, Value*> &sizeMap);
-        SmallVector<Value *, EXPECTED_BLOCK_NUMS> Visited;
         Value *one;
-
         bool isFunctionCalledFromOtherPlaces(Function &TargetFunction);
         Function* calcArgs(Function &F);
         CallInst *findAndProcessCalls(Function &F, CallInst *callCmp);
+        vector<Function*> deletedFucntions;
+        vector<Function*> addedFunctions;
+        bool isChanged = false;
 
     };
 }
 
 Value *BoundsChecker::getNextOperand(Argument *Arg, Function *Func){
-
     LOG_LINE("yes");
     auto ArgIter = Func->arg_begin();
     LOG_LINE("yes");
@@ -52,9 +43,7 @@ Value *BoundsChecker::getNextOperand(Argument *Arg, Function *Func){
         ++ArgIter;
     }
     LOG_LINE("yes");
-
     Argument *returnArg = &*(++ArgIter);
-
     return returnArg;
 
 }
@@ -64,7 +53,6 @@ Value *BoundsChecker::determineArraySize(Value *V, IRBuilder<> &B, map<Value*, V
     if (sizeMap.find(V) != sizeMap.end()) {
         return sizeMap[V];
     }
-
     if(isa<AllocaInst>(V)) {
         AllocaInst *AI = dyn_cast<AllocaInst>(V);
         return AI->getArraySize();
@@ -99,14 +87,10 @@ Value *BoundsChecker::determineArraySize(Value *V, IRBuilder<> &B, map<Value*, V
                 ArrayType *ArrType = cast<ArrayType>(ArgType);
                 return ConstantInt::get(B.getInt32Ty(), ArrType->getNumElements());
             }
-
             LOG_LINE("yesb");
             Function *Func = Arg->getParent();
-
             return getNextOperand(Arg, Func);
-
             LOG_LINE("Return type failed its returning 1");
-
             return B.getInt32(1);
         }
     }
@@ -124,12 +108,9 @@ Value *BoundsChecker::determineArraySize(Value *V, IRBuilder<> &B, map<Value*, V
         if (sizeMap.find(PHI) != sizeMap.end()) {
             return sizeMap[PHI];
         }
-
         PHINode *sizePHI = PHINode::Create(B.getInt32Ty(), PHI->getNumIncomingValues(), "size.phi", PHI);
-
         for (unsigned i = 0; i < PHI->getNumIncomingValues(); ++i) {
             Value *incomingValue = PHI->getIncomingValue(i);
-
             if (incomingValue == PHI) {
                 sizePHI->addIncoming(sizePHI, PHI->getIncomingBlock(i));
             } else {
@@ -140,7 +121,6 @@ Value *BoundsChecker::determineArraySize(Value *V, IRBuilder<> &B, map<Value*, V
         sizeMap[PHI] = sizePHI;
         return sizePHI;
     }
-
     return B.getInt32(0);
 }
 
@@ -161,18 +141,13 @@ Value *BoundsChecker::gepOffsetAccumulator(Value *V, IRBuilder<> &B) {
 
 bool BoundsChecker::instrumentGeps(Function &F) {
     bool changed = false;
-
     IRBuilder<> B(&F.getEntryBlock());
-
     std::map<Value*, Value*> sizeMap;
 
     for (Instruction &II : instructions(F)) {
         Instruction *I = &II;
-
         if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I)) {
-            
             LOG_LINE("GEP FOUNDDD");
-
 
             if (GlobalVariable *GV = dyn_cast<GlobalVariable>(GEP->getPointerOperand())) {
                 if (GV->hasInitializer() && GV->getType()->getElementType()->isArrayTy()) {
@@ -184,7 +159,7 @@ bool BoundsChecker::instrumentGeps(Function &F) {
             Value *offset = gepOffsetAccumulator(GEP, B);
             Value *arraySize = determineArraySize(GEP->getOperand(0), B, sizeMap);
 
-            B.SetInsertPoint(AI);
+            B.SetInsertPoint(GEP);
             B.CreateCall(boundsCheckCall, {offset, arraySize} );
             changed = true;
         }
@@ -252,36 +227,25 @@ Function* BoundsChecker::calcArgs(Function &F){
             return NULL;
         }
     }
-    
-    
-
-    Function *NewFunc;
-
-    if (!isFunctionCalledFromOtherPlaces(F))
-    {
+    Function *newFunc;
+    if (!isFunctionCalledFromOtherPlaces(F)) {
         LOG_LINE("Not called in other places");
     }
 
     if (!F.isDeclaration()) {
-        
         IRBuilder<> Builder(F.getContext());
-
-
-        SmallVector<Argument*, 8> NewArgs;
-        
-
+        SmallVector<Argument*, 8> newArgs;
         for (Argument &Arg : F.args()) {
-            
             if (Arg.getType()->isPointerTy()) {
                 
                 LOG_LINE("This arg is a pointer type new fucntion forming");
 
                 Type *elementType = Arg.getType()->getPointerElementType();
-                NewFunc = addParamsToFunction(&F, {elementType}, NewArgs);
+                newFunc = addParamsToFunction(&F, {elementType}, newArgs);
 
                 isChanged = true;
 
-                LOG_LINE("New fucntion has been made" << NewFunc);
+                LOG_LINE("New fucntion has been made" << newFunc);
 
                 for (User *U : F.users()) {
 
@@ -306,24 +270,17 @@ Function* BoundsChecker::calcArgs(Function &F){
                             }
                         }
                         
-
-                        
-
                         LOG_LINE("IF STATEMENT FOR THE CALL CHANGING");
-
-                        SmallVector<Value*, 8> NewCallArgs;
-
+                        SmallVector<Value*, 8> newCallArgs;
                         Value *sizeValue;
-                        
                         CallInst *processedCall;
 
-                        if (isArgCall)
-                        {
+                        if (isArgCall) {
                             processedCall = findAndProcessCalls(*recFunc, Call);
                             for (Value *Operand : processedCall->operands()) {
                                 LOG_LINE("This is operand iterator");
 
-                                NewCallArgs.push_back(Operand);
+                                newCallArgs.push_back(Operand);
 
                                 sizeValue = getNextOperand(&(*recFunc->arg_begin()), recFunc);
                                 break;
@@ -331,69 +288,51 @@ Function* BoundsChecker::calcArgs(Function &F){
                         } else {
                             for (Value *Operand : Call->operands()) {
                                 LOG_LINE("This is operand iterator");
-
-                                NewCallArgs.push_back(Operand);
-
+                                newCallArgs.push_back(Operand);
                                 LOG_LINE("before checking the alloc if statement");
                                 if (AllocaInst *Alloca = dyn_cast<AllocaInst>(Operand)) {
                                     LOG_LINE("ENTERED ARRAY LOOKUP");
                                     sizeValue = Alloca->getArraySize();
-
                                     break;
                                 }
                             }
                         }
-
-
-                        NewCallArgs.push_back(sizeValue);
-
+                        newCallArgs.push_back(sizeValue);
                         LOG_LINE("exited for look for vals statement");
-
                         Function *CalledFunction = Call->getCalledFunction();
                         LOG_LINE("THIS IS THE NAME: " << CalledFunction->getName() << " AND THIS " << F.getName());
-                        if (CalledFunction->getName() != F.getName())
-                        {
+                        if (CalledFunction->getName() != F.getName()) {
                             break;
                         }
-
-                        unsigned int numArgsFunc = NewFunc->arg_size();
-                        unsigned int numArgsCall = NewCallArgs.size();
+                        unsigned int numArgsFunc = newFunc->arg_size();
+                        unsigned int numArgsCall = newCallArgs.size();
                         LOG_LINE("Number of arguments in NewFunc: " << numArgsFunc << " this is the size of the call: " << numArgsCall);
-                        
-                        FunctionType* newFuncType = NewFunc->getFunctionType();
+                        FunctionType* newFuncType = newFunc->getFunctionType();
                         FunctionType* calledFuncType = Call->getFunctionType();
-
                         LOG_LINE("NewFunc Type: " << *newFuncType);
                         LOG_LINE("Called Function Type: " << *calledFuncType);
-
                         LOG_LINE("hello world");
 
-                        CallInst *NewCall;
+                        CallInst *newCall;
                         if(isArgCall) {
-                            NewCall = CallInst::Create(NewFunc, NewCallArgs, "", processedCall);
+                            newCall = CallInst::Create(newFunc, newCallArgs, "", processedCall);
                         }
                         else {
-                            NewCall = CallInst::Create(NewFunc, NewCallArgs, "", Call);
+                            newCall = CallInst::Create(newFunc, newCallArgs, "", Call);
                         }
                         LOG_LINE("yes");
-                        Call->replaceAllUsesWith(NewCall);
+                        Call->replaceAllUsesWith(newCall);
                         LOG_LINE("yes");
 
                         Call->eraseFromParent();
                         deletedFucntions.push_back(&F);
-                        addedFunctions.push_back(NewFunc);
+                        addedFunctions.push_back(newFunc);
                         LOG_LINE("returned newly made fucntion");
-                        return NewFunc;
-
-                        
+                        return newFunc;
                     }
                 }
-                                    
-
             }
         }
-
-
     }
     return NULL;
 }
@@ -409,7 +348,7 @@ bool BoundsChecker::runOnModule(Module &M) {
                                           VoidTy, Int32Ty, Int32Ty);
     boundsCheckCall = cast<Function>(FnCallee.getCallee());
 
-     bool Changed = false;
+     bool changed = false;
 
      for (Function &F : M) {
         if (!shouldInstrument(&F))
@@ -421,17 +360,17 @@ bool BoundsChecker::runOnModule(Module &M) {
         
         if (isChanged)
         {
-            Changed |= instrumentGeps(*NewFunc);
+            changed |= instrumentGeps(*NewFunc);
             LOG_LINE("FUCNTION EXITED " << NewFunc->getName());
 
         } else {
-            Changed |= instrumentGeps(F);
+            changed |= instrumentGeps(F);
             LOG_LINE("FUCNTION EXITED " << F.getName());
         }
         isChanged = false;
     }
 
-    return Changed;
+    return changed;
 }
 
 char BoundsChecker::ID = 0;
